@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JLPT Mock Exam Portal | Result & Progress</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    body { background: #f1f5f9; }
+    .jlpt-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.02), 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .navy-text { color: #0f2c59; }
+    .badge-pass {
+      background-color: #dcfce7; color: #166534; font-weight: 600;
+      padding: 0.25rem 1rem; border-radius: 9999px; font-size: 0.75rem;
+      border: 1px solid #86efac;
+    }
+    .badge-fail {
+      background-color: #fee2e2; color: #991b1b; font-weight: 600;
+      padding: 0.25rem 1rem; border-radius: 9999px; font-size: 0.75rem;
+      border: 1px solid #fca5a5;
+    }
+    .table-jlpt th {
+      background-color: #1e3a8a; color: white; font-weight: 500;
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 0.75rem 1rem; text-align: left;
+    }
+    .table-jlpt td {
+      padding: 0.75rem 1rem; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem;
+    }
+    .input-field {
+      border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.6rem 0.9rem;
+      font-size: 0.9rem; width: 100%; transition: border 0.15s;
+    }
+    .input-field:focus { outline: none; border-color: #1e3a8a; box-shadow: 0 0 0 3px rgba(30,58,138,0.15); }
+    .btn-primary {
+      background-color: #1e3a8a; color: white; padding: 0.6rem 1.5rem;
+      border-radius: 0.5rem; font-weight: 500; font-size: 0.9rem;
+      transition: background 0.15s; cursor: pointer; border: none;
+    }
+    .btn-primary:hover { background-color: #0f2c59; }
+    .btn-secondary {
+      background-color: white; color: #1e3a8a; border: 1px solid #cbd5e1;
+      padding: 0.6rem 1.5rem; border-radius: 0.5rem; font-weight: 500;
+      cursor: pointer; transition: 0.15s;
+    }
+    .btn-secondary:hover { background-color: #f8fafc; }
+    .hidden { display: none !important; }
+    .loader {
+      border: 3px solid #e2e8f0; border-top: 3px solid #1e3a8a;
+      border-radius: 50%; width: 24px; height: 24px;
+      animation: spin 0.8s linear infinite; display: inline-block;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .toast-msg {
+      position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+      padding: 12px 20px; border-radius: 8px; font-size: 0.9rem;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1); color: white;
+    }
+    .toast-success { background: #16a34a; }
+    .toast-error { background: #dc2626; }
+    .toast-info { background: #1e3a8a; }
+  </style>
+</head>
+<body class="antialiased text-slate-800">
+
+  <div id="app" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- LOADING OVERLAY -->
+    <div id="global-loader" class="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+      <div class="flex flex-col items-center gap-3">
+        <div class="loader"></div>
+        <span class="text-sm text-slate-500 font-medium">Loading…</span>
+      </div>
+    </div>
+
+    <!-- ========== STUDENT PORTAL ========== -->
+    <div id="student-portal">
+      <!-- LOGIN -->
+      <div id="student-login-view" class="max-w-md mx-auto mt-12 md:mt-20">
+        <div class="jlpt-card rounded-xl p-8">
+          <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold navy-text">JLPT Mock Exam</h1>
+            <p class="text-slate-500 text-sm mt-1">Student Result & Progress Portal</p>
+            <div class="w-16 h-1 bg-blue-900 mx-auto mt-3 rounded-full"></div>
+          </div>
+          <form id="student-login-form">
+            <div class="mb-6">
+              <label class="block text-sm font-medium text-slate-700 mb-1">
+                <i class="fas fa-id-card mr-1 text-slate-400"></i>
+                Registration / Index Number
+              </label>
+              <input type="text" id="student-index" class="input-field" placeholder="e.g. JLPT-001" autocomplete="off" autofocus>
+            </div>
+            <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+              <i class="fas fa-sign-in-alt"></i> View My Results
+            </button>
+            <div id="student-login-error" class="text-red-600 text-sm mt-3 text-center hidden"></div>
+          </form>
+          <div class="mt-6 pt-4 border-t border-slate-200 text-center">
+            <button id="show-admin-login-btn" class="text-xs text-slate-400 hover:text-slate-600 transition">
+              <i class="fas fa-lock mr-1"></i>Administrator access
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <div id="student-dashboard-view" class="hidden">
+        <!-- Header -->
+        <div class="jlpt-card rounded-xl p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="bg-blue-900 text-white w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold">
+              <i class="fas fa-user-graduate"></i>
+            </div>
+            <div>
+              <h1 class="text-xl font-bold navy-text" id="dash-student-name">—</h1>
+              <div class="flex flex-wrap gap-2 text-xs text-slate-500 mt-1">
+                <span class="bg-slate-100 px-2 py-0.5 rounded-full"><i class="fas fa-id-card mr-1"></i><span id="dash-student-index">—</span></span>
+                <span class="bg-slate-100 px-2 py-0.5 rounded-full"><i class="fas fa-layer-group mr-1"></i><span id="dash-student-level">—</span></span>
+                <span class="bg-slate-100 px-2 py-0.5 rounded-full"><i class="fas fa-calendar-alt mr-1"></i>Batch <span id="dash-student-batch">—</span></span>
+              </div>
+            </div>
+          </div>
+          <button id="student-logout-btn" class="btn-secondary text-sm">
+            <i class="fas fa-sign-out-alt mr-1"></i>Logout
+          </button>
+        </div>
+
+        <!-- Latest Score + Chart -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div class="lg:col-span-2 jlpt-card rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold navy-text"><i class="fas fa-file-alt mr-2"></i>Latest Exam Result</h2>
+              <span id="latest-paper-label" class="text-xs bg-slate-100 px-3 py-1 rounded-full text-slate-600">—</span>
+            </div>
+            <div id="latest-score-container"></div>
+          </div>
+          <div class="jlpt-card rounded-xl p-5 flex flex-col">
+            <h2 class="text-lg font-semibold navy-text mb-3"><i class="fas fa-chart-line mr-2"></i>Progress</h2>
+            <div class="flex-1">
+              <canvas id="progressChart" style="max-height:200px;"></canvas>
+            </div>
+            <div class="mt-3 text-xs text-slate-400 text-right">Total papers: <span id="paper-count" class="font-semibold">0</span></div>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="jlpt-card rounded-xl p-5">
+          <h2 class="text-lg font-semibold navy-text mb-4"><i class="fas fa-history mr-2"></i>Historical Scores</h2>
+          <div class="overflow-x-auto">
+            <table class="w-full table-jlpt">
+              <thead>
+                <tr>
+                  <th>Paper</th>
+                  <th>Language Knowledge</th>
+                  <th>Reading</th>
+                  <th>Listening</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Feedback</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body"></tbody>
+            </table>
+          </div>
+          <div id="no-history-msg" class="text-center py-8 text-slate-400 text-sm">No exam records yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== ADMIN LOGIN MODAL ========== -->
+    <div id="admin-login-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-40 hidden p-4">
+      <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+        <div class="flex justify-between items-center mb-5">
+          <h2 class="text-xl font-bold navy-text"><i class="fas fa-user-shield mr-2"></i>Admin Login</h2>
+          <button id="close-admin-modal" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+        </div>
+        <form id="admin-login-form">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Admin Password</label>
+            <input type="password" id="admin-passcode" class="input-field" placeholder="Enter admin password" autofocus>
+          </div>
+          <div id="admin-login-error" class="text-red-600 text-sm mb-3 hidden"></div>
+          <button type="submit" class="btn-primary w-full">Access Admin Panel</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========== ADMIN PANEL ========== -->
+    <div id="admin-panel" class="hidden">
+      <div class="jlpt-card rounded-xl p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="bg-slate-800 text-white w-10 h-10 rounded-full flex items-center justify-center">
+            <i class="fas fa-cog"></i>
+          </div>
+          <h1 class="text-xl font-bold navy-text">Admin Control Panel</h1>
+        </div>
+        <button id="admin-logout-btn" class="btn-secondary text-sm"><i class="fas fa-sign-out-alt mr-1"></i>Exit</button>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <!-- LEFT -->
+        <div class="xl:col-span-1 space-y-6">
+          <!-- Add Student -->
+          <div class="jlpt-card rounded-xl p-5">
+            <h2 class="text-base font-semibold navy-text mb-4"><i class="fas fa-user-plus mr-2"></i>Add New Student</h2>
+            <form id="add-student-form">
+              <div class="mb-3">
+                <label class="text-xs font-medium text-slate-600">Index Number</label>
+                <input type="text" id="new-student-index" class="input-field mt-1" placeholder="JLPT-002" required>
+              </div>
+              <div class="mb-3">
+                <label class="text-xs font-medium text-slate-600">Full Name</label>
+                <input type="text" id="new-student-name" class="input-field mt-1" placeholder="Hanako Tanaka" required>
+              </div>
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label class="text-xs font-medium text-slate-600">Level</label>
+                  <select id="new-student-level" class="input-field mt-1">
+                    <option value="N5">N5</option>
+                    <option value="N4">N4</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-slate-600">Batch</label>
+                  <input type="text" id="new-student-batch" class="input-field mt-1" value="2025">
+                </div>
+              </div>
+              <button type="submit" class="btn-primary w-full text-sm">Create Student</button>
+            </form>
+          </div>
+
+          <!-- Marks Entry -->
+          <div class="jlpt-card rounded-xl p-5">
+            <h2 class="text-base font-semibold navy-text mb-4"><i class="fas fa-edit mr-2"></i>Exam Marks Entry</h2>
+            <form id="marks-entry-form">
+              <div class="mb-3">
+                <label class="text-xs font-medium text-slate-600">Student</label>
+                <select id="marks-student-select" class="input-field mt-1" required>
+                  <option value="">— Select —</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="text-xs font-medium text-slate-600">Paper</label>
+                <select id="marks-paper-select" class="input-field mt-1">
+                  <option value="paper01">Paper 01</option>
+                  <option value="paper02">Paper 02</option>
+                  <option value="paper03">Paper 03</option>
+                  <option value="paper04">Paper 04</option>
+                  <option value="paper05">Paper 05</option>
+                  <option value="paper06">Paper 06</option>
+                  <option value="paper07">Paper 07</option>
+                  <option value="paper08">Paper 08</option>
+                  <option value="paper09">Paper 09</option>
+                  <option value="paper10">Paper 10</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-3 gap-2 mb-3">
+                <div>
+                  <label class="text-xs font-medium text-slate-600">Vocab/Kanji/Gram</label>
+                  <input type="number" id="marks-vocab" class="input-field mt-1" min="0" max="60" value="0">
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-slate-600">Reading</label>
+                  <input type="number" id="marks-reading" class="input-field mt-1" min="0" max="60" value="0">
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-slate-600">Listening</label>
+                  <input type="number" id="marks-listening" class="input-field mt-1" min="0" max="60" value="0">
+                </div>
+              </div>
+              <div class="mb-3 bg-slate-50 p-3 rounded-lg flex justify-between items-center">
+                <span class="text-xs font-medium text-slate-500">Total Score</span>
+                <span id="auto-total-display" class="text-lg font-bold navy-text">0 / 180</span>
+              </div>
+              <div class="mb-3">
+                <label class="text-xs font-medium text-slate-600">Teacher's Remark</label>
+                <textarea id="marks-feedback" class="input-field mt-1" rows="2" placeholder="Good progress..."></textarea>
+              </div>
+              <button type="submit" class="btn-primary w-full text-sm">Save Marks</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- RIGHT -->
+        <div class="xl:col-span-2">
+          <div class="jlpt-card rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-base font-semibold navy-text"><i class="fas fa-users mr-2"></i>Student Overview</h2>
+              <span class="text-xs text-slate-400"><span id="student-count-badge">0</span> enrolled</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full table-jlpt">
+                <thead>
+                  <tr>
+                    <th>Index</th>
+                    <th>Name</th>
+                    <th>Level</th>
+                    <th>Latest Score</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-student-table-body"></tbody>
+              </table>
+            </div>
+            <div id="admin-no-students" class="text-center py-6 text-slate-400 text-sm">No students enrolled.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast-msg hidden"></div>
+  </div>
+
+  <script>
+    // ================================================================
+    //  SUPABASE CONFIG
+    // ================================================================
+    const SUPABASE_URL = 'https://eonseagaptpuqbmjefze.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvbnNlYWdhcHRwdXFibWplZnplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMTQzMTMsImV4cCI6MjEwNjc5MDMxM30.Gorda1NUVjXuPFDjrW5YLsnKT3cu5yA2xTTz12h_JG4';
+
+    // Admin password (change this to your own)
+    const ADMIN_PASSWORD = 'admin2025';
+
+    // Supabase client
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ================================================================
+    //  HELPERS
+    // ================================================================
+    const $ = (id) => document.getElementById(id);
+    const show = (el) => el.classList.remove('hidden');
+    const hide = (el) => el.classList.add('hidden');
+    const showLoader = () => show($('global-loader'));
+    const hideLoader = () => hide($('global-loader'));
+
+    let currentStudent = null;
+    let currentChart = null;
+
+    function toast(msg, type = 'info') {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = `toast-msg toast-${type}`;
+      show(t);
+      setTimeout(() => hide(t), 3000);
+    }
+
+    function determineStatus(v, r, l, level = 'N5') {
+      const total = v + r + l;
+      const sectionMin = 19;
+      const totalMin = level === 'N5' ? 80 : 90;
+      const passed = total >= totalMin && v >= sectionMin && r >= sectionMin && l >= sectionMin;
+      return { passed, total };
+    }
+
+    function paperLabel(p) {
+      return p.replace('paper', 'Paper ');
+    }
+
+    // ================================================================
+    //  STUDENT LOGIN
+    // ================================================================
+    $('student-login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const index = $('student-index').value.trim().toUpperCase();
+      const errEl = $('student-login-error');
+      hide(errEl);
+
+      if (!index) {
+        errEl.textContent = 'Please enter your index number.';
+        show(errEl);
+        return;
+      }
+
+      showLoader();
+      try {
+        const { data, error } = await sb
+          .from('students')
+          .select('*')
+          .eq('index_number', index)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) {
+          errEl.textContent = 'Student not found. Check your index number.';
+          show(errEl);
+          hideLoader();
+          return;
+        }
+
+        currentStudent = data;
+        hide($('student-login-view'));
+        show($('student-dashboard-view'));
+        await loadStudentDashboard();
+        hideLoader();
+        toast(`Welcome, ${data.name}!`, 'success');
+      } catch (err) {
+        console.error(err);
+        errEl.textContent = 'Connection error. Please try again.';
+        show(errEl);
+        hideLoader();
+      }
+    });
+
+    // ================================================================
+    //  STUDENT DASHBOARD
+    // ================================================================
+    async function loadStudentDashboard() {
+      if (!currentStudent) return;
+      showLoader();
+
+      $('dash-student-name').textContent = currentStudent.name;
+      $('dash-student-index').textContent = currentStudent.index_number;
+      $('dash-student-level').textContent = currentStudent.level;
+      $('dash-student-batch').textContent = currentStudent.batch || '2025';
+
+      try {
+        const { data: scores, error } = await sb
+          .from('scores')
+          .select('*')
+          .eq('student_index', currentStudent.index_number);
+
+        if (error) throw error;
+
+        // Sort papers
+        const paperOrder = ['paper01','paper02','paper03','paper04','paper05','paper06','paper07','paper08','paper09','paper10'];
+        const scoreMap = {};
+        (scores || []).forEach(s => { scoreMap[s.paper] = s; });
+        const sortedPapers = paperOrder.filter(p => scoreMap[p]);
+
+        // Latest score
+        const latestContainer = $('latest-score-container');
+        if (sortedPapers.length === 0) {
+          latestContainer.innerHTML = `<div class="text-center py-6 text-slate-400 text-sm">No exam records yet.</div>`;
+          $('latest-paper-label').textContent = '—';
+        } else {
+          const latestPaper = sortedPapers[sortedPapers.length - 1];
+          const d = scoreMap[latestPaper];
+          const v = d.vocab || 0, r = d.reading || 0, l = d.listening || 0;
+          const total = d.total || (v + r + l);
+          const passed = d.status !== undefined ? d.status : determineStatus(v, r, l, currentStudent.level).passed;
+          const badge = passed
+            ? '<span class="badge-pass"><i class="fas fa-check-circle mr-1"></i>PASSED</span>'
+            : '<span class="badge-fail"><i class="fas fa-times-circle mr-1"></i>FAILED</span>';
+
+          $('latest-paper-label').textContent = paperLabel(latestPaper).toUpperCase();
+
+          latestContainer.innerHTML = `
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="bg-slate-50 p-3 rounded-lg">
+                <div class="text-xs uppercase text-slate-500 mb-1">Language Knowledge</div>
+                <div class="text-xl font-bold navy-text">${v} <span class="text-sm font-normal text-slate-400">/ 60</span></div>
+              </div>
+              <div class="bg-slate-50 p-3 rounded-lg">
+                <div class="text-xs uppercase text-slate-500 mb-1">Reading</div>
+                <div class="text-xl font-bold navy-text">${r} <span class="text-sm font-normal text-slate-400">/ 60</span></div>
+              </div>
+              <div class="bg-slate-50 p-3 rounded-lg">
+                <div class="text-xs uppercase text-slate-500 mb-1">Listening</div>
+                <div class="text-xl font-bold navy-text">${l} <span class="text-sm font-normal text-slate-400">/ 60</span></div>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              <div class="flex items-center gap-4">
+                <div>
+                  <div class="text-xs uppercase text-slate-500">Total Score</div>
+                  <div class="text-2xl font-bold navy-text">${total} <span class="text-sm font-normal text-slate-400">/ 180</span></div>
+                </div>
+                ${badge}
+              </div>
+              <div class="text-right max-w-xs">
+                <div class="text-xs uppercase text-slate-500">Teacher's Remark</div>
+                <div class="text-sm text-slate-600 italic">"${d.feedback || '—'}"</div>
+              </div>
+            </div>
+          `;
+        }
+
+        // History table
+        const tbody = $('history-table-body');
+        tbody.innerHTML = '';
+        if (sortedPapers.length === 0) {
+          show($('no-history-msg'));
+        } else {
+          hide($('no-history-msg'));
+          sortedPapers.forEach(paper => {
+            const d = scoreMap[paper];
+            const v = d.vocab || 0, r = d.reading || 0, l = d.listening || 0;
+            const tot = d.total || (v + r + l);
+            const st = d.status !== undefined ? d.status : determineStatus(v, r, l, currentStudent.level).passed;
+            const badge = st ? '<span class="badge-pass text-xs">Passed</span>' : '<span class="badge-fail text-xs">Failed</span>';
+            tbody.innerHTML += `
+              <tr>
+                <td class="font-medium">${paperLabel(paper).toUpperCase()}</td>
+                <td>${v}</td>
+                <td>${r}</td>
+                <td>${l}</td>
+                <td class="font-semibold">${tot}</td>
+                <td>${badge}</td>
+                <td class="text-xs text-slate-500">${d.feedback || '—'}</td>
+              </tr>
+            `;
+          });
+        }
+
+        // Chart
+        if (currentChart) currentChart.destroy();
+        const ctx = $('progressChart').getContext('2d');
+        const labels = sortedPapers.map(p => paperLabel(p).replace('Paper ', 'P'));
+        const totals = sortedPapers.map(p => {
+          const d = scoreMap[p];
+          return d.total || ((d.vocab||0)+(d.reading||0)+(d.listening||0));
+        });
+        $('paper-count').textContent = sortedPapers.length;
+
+        currentChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels.length ? labels : ['No data'],
+            datasets: [{
+              label: 'Total Score',
+              data: totals.length ? totals : [0],
+              borderColor: '#1e3a8a',
+              backgroundColor: 'rgba(30,58,138,0.08)',
+              borderWidth: 2,
+              pointBackgroundColor: '#0f2c59',
+              pointRadius: 4,
+              tension: 0.3,
+              fill: true,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, max: 180, grid: { color: '#e2e8f0' } },
+              x: { grid: { display: false } }
+            }
+          }
+        });
+
+      } catch (err) {
+        console.error(err);
+        toast('Error loading scores', 'error');
+      } finally {
+        hideLoader();
+      }
+    }
+
+    // Student logout
+    $('student-logout-btn').addEventListener('click', () => {
+      currentStudent = null;
+      if (currentChart) { currentChart.destroy(); currentChart = null; }
+      hide($('student-dashboard-view'));
+      show($('student-login-view'));
+      $('student-login-form').reset();
+    });
+
+    // ================================================================
+    //  ADMIN LOGIN
+    // ================================================================
+    $('show-admin-login-btn').addEventListener('click', () => {
+      show($('admin-login-modal'));
+      $('admin-passcode').value = '';
+      hide($('admin-login-error'));
+      setTimeout(() => $('admin-passcode').focus(), 100);
+    });
+
+    $('close-admin-modal').addEventListener('click', () => hide($('admin-login-modal')));
+
+    $('admin-login-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const pass = $('admin-passcode').value;
+      if (pass === ADMIN_PASSWORD) {
+        hide($('admin-login-modal'));
+        hide($('student-portal'));
+        show($('admin-panel'));
+        $('admin-passcode').value = '';
+        hide($('admin-login-error'));
+        loadAdminPanel();
+        toast('Welcome, Admin!', 'success');
+      } else {
+        $('admin-login-error').textContent = 'Incorrect password. Try again.';
+        show($('admin-login-error'));
+      }
+    });
+
+    $('admin-logout-btn').addEventListener('click', () => {
+      hide($('admin-panel'));
+      show($('student-portal'));
+      hide($('student-dashboard-view'));
+      show($('student-login-view'));
+      currentStudent = null;
+    });
+
+    // ================================================================
+    //  ADMIN PANEL LOADER
+    // ================================================================
+    let allStudentsCache = {};
+
+    async function loadAdminPanel() {
+      showLoader();
+      try {
+        const { data: students, error } = await sb
+          .from('students')
+          .select('*')
+          .order('index_number');
+
+        if (error) throw error;
+        allStudentsCache = {};
+        (students || []).forEach(s => { allStudentsCache[s.index_number] = s; });
+        await renderAdminTable();
+        populateStudentDropdown();
+      } catch (err) {
+        console.error(err);
+        toast('Failed to load students', 'error');
+      } finally {
+        hideLoader();
+      }
+    }
+
+    async function renderAdminTable() {
+      const tbody = $('admin-student-table-body');
+      const keys = Object.keys(allStudentsCache);
+      $('student-count-badge').textContent = keys.length;
+
+      if (keys.length === 0) {
+        show($('admin-no-students'));
+        tbody.innerHTML = '';
+        return;
+      }
+      hide($('admin-no-students'));
+
+      // Fetch latest score per student
+      const rows = await Promise.all(keys.map(async (idx) => {
+        const { data: scores } = await sb
+          .from('scores')
+          .select('*')
+          .eq('student_index', idx);
+        const paperOrder = ['paper01','paper02','paper03','paper04','paper05','paper06','paper07','paper08','paper09','paper10'];
+        const sorted = paperOrder.filter(p => (scores || []).some(s => s.paper === p));
+        let total = '—', status = null, has = false;
+        if (sorted.length > 0) {
+          const last = (scores || []).find(s => s.paper === sorted[sorted.length - 1]);
+          total = last.total || ((last.vocab||0)+(last.reading||0)+(last.listening||0));
+          status = last.status;
+          has = true;
+        }
+        return { idx, student: allStudentsCache[idx], total, status, has };
+      }));
+
+      tbody.innerHTML = '';
+      rows.forEach(r => {
+        const badge = !r.has ? '<span class="text-xs text-slate-400">No data</span>' :
+          (r.status ? '<span class="badge-pass text-xs">Pass</span>' : '<span class="badge-fail text-xs">Fail</span>');
+        tbody.innerHTML += `
+          <tr>
+            <td class="font-mono text-xs font-medium">${r.idx}</td>
+            <td>${r.student.name}</td>
+            <td><span class="bg-blue-50 text-blue-800 px-2 py-0.5 rounded text-xs font-medium">${r.student.level}</span></td>
+            <td class="font-semibold">${r.total}</td>
+            <td>${badge}</td>
+            <td>
+              <button class="text-blue-700 hover:text-blue-900 text-xs font-medium mr-2" onclick="fillMarksForm('${r.idx}')">
+                <i class="fas fa-edit"></i> Marks
+              </button>
+              <button class="text-red-600 hover:text-red-800 text-xs font-medium" onclick="deleteStudent('${r.idx}')">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function populateStudentDropdown() {
+      const select = $('marks-student-select');
+      select.innerHTML = '<option value="">— Select —</option>';
+      Object.keys(allStudentsCache).forEach(idx => {
+        const s = allStudentsCache[idx];
+        select.innerHTML += `<option value="${idx}">${idx} – ${s.name} (${s.level})</option>`;
+      });
+    }
+
+    window.fillMarksForm = function(idx) {
+      $('marks-student-select').value = idx;
+      $('marks-entry-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    window.deleteStudent = async function(idx) {
+      if (!confirm(`Delete student ${idx}? This will also delete all their scores.`)) return;
+      showLoader();
+      try {
+        const { error } = await sb.from('students').delete().eq('index_number', idx);
+        if (error) throw error;
+        toast(`Student ${idx} deleted`, 'success');
+        await loadAdminPanel();
+      } catch (err) {
+        console.error(err);
+        toast('Delete failed: ' + err.message, 'error');
+      } finally {
+        hideLoader();
+      }
+    };
+
+    // ================================================================
+    //  ADD STUDENT
+    // ================================================================
+    $('add-student-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const index = $('new-student-index').value.trim().toUpperCase();
+      const name = $('new-student-name').value.trim();
+      const level = $('new-student-level').value;
+      const batch = $('new-student-batch').value.trim() || '2025';
+
+      if (!index || !name) { toast('Please fill all fields', 'error'); return; }
+      if (allStudentsCache[index]) { toast('Index already exists!', 'error'); return; }
+
+      showLoader();
+      try {
+        const { error } = await sb.from('students').insert({
+          index_number: index,
+          name: name,
+          level: level,
+          batch: batch
+        });
+        if (error) throw error;
+        toast(`Student ${index} added!`, 'success');
+        $('add-student-form').reset();
+        $('new-student-batch').value = '2025';
+        await loadAdminPanel();
+      } catch (err) {
+        console.error(err);
+        toast('Error: ' + err.message, 'error');
+      } finally {
+        hideLoader();
+      }
+    });
+
+    // ================================================================
+    //  MARKS ENTRY
+    // ================================================================
+    const vocabInput = $('marks-vocab'), readingInput = $('marks-reading'), listeningInput = $('marks-listening');
+
+    function updateAutoTotal() {
+      const v = parseInt(vocabInput.value) || 0;
+      const r = parseInt(readingInput.value) || 0;
+      const l = parseInt(listeningInput.value) || 0;
+      $('auto-total-display').textContent = `${Math.min(v + r + l, 180)} / 180`;
+    }
+    [vocabInput, readingInput, listeningInput].forEach(inp => inp.addEventListener('input', updateAutoTotal));
+
+    $('marks-entry-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const studentIdx = $('marks-student-select').value;
+      const paper = $('marks-paper-select').value;
+      const v = parseInt(vocabInput.value) || 0;
+      const r = parseInt(readingInput.value) || 0;
+      const l = parseInt(listeningInput.value) || 0;
+      const feedback = $('marks-feedback').value.trim();
+
+      if (!studentIdx) { toast('Select a student', 'error'); return; }
+      if (v > 60 || r > 60 || l > 60) { toast('Max per section is 60', 'error'); return; }
+
+      const student = allStudentsCache[studentIdx];
+      const { passed, total } = determineStatus(v, r, l, student?.level || 'N5');
+
+      showLoader();
+      try {
+        // Upsert (insert or update)
+        const { error } = await sb.from('scores').upsert({
+          student_index: studentIdx,
+          paper: paper,
+          vocab: v,
+          reading: r,
+          listening: l,
+          total: total,
+          status: passed,
+          feedback: feedback || '',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'student_index,paper' });
+
+        if (error) throw error;
+        toast(`Marks saved for ${studentIdx} – ${paperLabel(paper)}`, 'success');
+        vocabInput.value = 0; readingInput.value = 0; listeningInput.value = 0;
+        $('marks-feedback').value = '';
+        updateAutoTotal();
+        await loadAdminPanel();
+      } catch (err) {
+        console.error(err);
+        toast('Error: ' + err.message, 'error');
+      } finally {
+        hideLoader();
+      }
+    });
+
+    // ================================================================
+    //  INIT
+    // ================================================================
+    updateAutoTotal();
+    hide($('admin-panel'));
+  </script>
+</body>
+</html>
